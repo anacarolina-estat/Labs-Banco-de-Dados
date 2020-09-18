@@ -1,0 +1,161 @@
+---
+title: "Manipulação de Banco de Dados - Laboratório 10"
+author: "Ana Carolina"
+date: "13 de novembro de 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Web Scraping
+Web Scraping uma estratégia de mineração de dados, na qual ferramentas são utilizadas para acessar sítios eletrônicos, extrair informações de interesse e estruturá-las de maneira apropriada. Em R, um dos pacotes mais utilizados é o rvest , construído em cima dos pacotes httr e xml2 , permitindo acesso ao conteúdo de páginas web. Este acesso, entretanto, pode depender de customizações específicas, caso a página não siga uma estrutura fixa.
+
+# Tarefas: 
+
+## Q1:  Visite o site Chance de Gol ( http://www.chancedegol.com.br ) e explore a tabela de jogos realizados;
+
+## Q2:  Proponha uma estrutura (de tabela em R) para acomodar os dados em questão:
+  - O placar como apresentado permite manipulação matemática?
+  - A data está em formato adequado para operações?
+  - As probabilidades de vitória estão em formato apropriado para manipulação matemática?
+
+## Q3: Sabendo que os dados mantidos pelo site estão disponíveis a partir do ano de 2001, explore as informações disponíveis para:
+  - Ano 2001: http://www.chancedegol.com.br/br01.htm
+  - Ano 2010: http://www.chancedegol.com.br/br10.htm
+  - Ano 2018: http://www.chancedegol.com.br/br18.htm
+  - Ano 2019: http://www.chancedegol.com.br/br19.htm
+
+## Q4: As tabelas estão em conformidade com aquela avaliada no Item 2? Todos os campos apresentam o mesmo formato? Que campos não apresentam a mesma estrutura?
+
+## Q5: Crie funções que tornem os campos apresentados no Item 4. homogêneos entre os anos.
+
+## Q6: Crie uma função que, utilizando o ano de entrada, crie uma tabela (classe tibble) contendo as informações disponibilizadas para todos os jogos do campeonato brasileiro realizados naquele ano.
+
+## Q7:Crie uma base de dados consolidada, contendo todos os placares de jogos realizados em todos os Campeonatos Brasileiros realizados de 2001 a 2018.
+
+## Q8:Crie uma função que, utilizando a base do Item 7., apresente os percentuais de vitória (ou empate) para jogos de quaisquer dois times dados como entrada pelo usuário. Por exemplo, se a entrada dada for “Flamengo” e “Vasco”, então a função deve retornar a seguinte tabela de resposta:
+
+## Dicas
+Comandos do rvest que podem ser empregados incluem:
+  - read_html
+  - html_nodes
+  - html_table
+
+## Pacotes utilizados
+```{r}
+library(tidyverse)
+library(rvest)
+library(stringr)
+library(lubridate)
+```
+
+```{r}
+# função para extrair a tabela da página web 
+extrai_tabela = function(ano_interesse){
+
+  sprintf("http://www.chancedegol.com.br/br%02d.htm", ano_interesse-2000)  
+
+  url = "http://www.chancedegol.com.br/br01.htm"
+  tbl = read_html(url) %>% html_nodes("table") %>% html_table(header = TRUE)
+
+  tbl = tbl[[1]]  
+  #class(tbl)
+  
+  names(tbl) = c("data", "mandante", "resultado", "visitante", "prob_m", "prob_e", "prob_v")
+  tbl = as.tibble(tbl)
+  
+  cleanProb = function(v){
+    as.numeric(str_replace(str_remove(v, " %"), ",", "."))/100  
+  }
+
+# limpando     
+tbl = tbl %>% separate(data, c("dia", "mes", "ano"), sep = "/") %>%
+    mutate(ano = ano_interesse, 
+           data = dmy(paste(dia, mes, ano, sep = "-"))) %>% 
+    select(-dia, -mes, -ano) %>%
+    mutate_at(c("prob_m", "prob_e", "prob_v"), cleanProb) %>%
+    separate(resultado, c("gol_mandante", "gol_visitante"), sep = "x") %>%
+    mutate_at(c("gol_mandante", "gol_visitante"), as.integer)
+}
+
+#lapply(2001:2018, extrai_tabela)
+extrai_tabela(2001)
+
+# junta todas as tabelas de todos anos e junta em uma só 
+todos = do.call(rbind, lapply(2001:2018, extrai_tabela))
+
+class(todos)
+todos
+```
+
+```{r}
+# saber a prob de um time (flamengo) ganhar o próximo jogo 
+todos %>% 
+  filter(mandante == "Cruzeiro" | visitante == "Cruzeiro") %>%
+  mutate(vencedor = ifelse(gol_mandante > gol_visitante, 
+                           mandante, 
+                           ifelse(gol_mandante < gol_visitante,
+                                  visitante, "empate"))) %>%
+  select(-prob_m, -prob_e, -prob_v) %>%
+  summarise(prob = mean(vencedor == "Cruzeiro"))
+
+# saber um jogo especifico ex: atletico e flu
+filter(mandante %in% c("Atlético MG", "Fluminense") | visitante %in% c("Atlético MG", "Fluminense")) 
+```
+
+```{r}
+ano_interesse = 2018L
+
+sprintf("http://www.chancedegol.com.br/br%02d.htm", ano_interesse-2000)  
+# define um formato com 2 digitos aí a pessoa pode passar o ano com apensas 1 ou 2 dígitos 
+# substitui esse pedaço %02d pelo que vem na url 
+
+url = "http://www.chancedegol.com.br/br01.htm"
+br01 = read_html(url)
+
+tbl = br01 %>% html_nodes("table") %>% html_table(header = TRUE)
+# html_nodes("table") %>% html_table(): encontrar tableas (nós) dentro da página e trazer para o r 
+# header = TRUE: primeiro registro deve ser executado como nome das colunas 
+
+tbl = tbl[[1]]   # tbl é uma lista onde o primeiro e único elemento é um data frame e quero esse data frame
+class(tbl)       # é realmente um DF
+
+
+names(tbl) = c("data", "mandante", "resultado", "visitante", "prob_m", "prob_e", "prob_v")
+tbl = as.tibble(tbl)
+# para transformar em tible todas as colunas tem que ter nomes 
+```
+
+```{r}
+# tranformando as prob_i: 
+cleanProb = function(v){
+  as.numeric(str_replace(str_remove(v, " %"), ",", "."))/100  
+  # remove do vetor v " %"
+  # substitui , por . 
+  # trasforma em numerico
+  # tranforma tudo em porcentagem dividindo por 100
+}
+
+# concertanto a data, juntando com a tranf feita acima e separando a coluna de resultado em duas col de inteiros: 
+tbl = tbl %>% separate(data, c("dia", "mes", "ano"), sep = "/") %>%
+  mutate(ano = ano_interesse, 
+         data = dmy(paste(dia, mes, ano, sep = "-"))) %>% 
+  select(-dia, -mes, -ano) %>%
+  mutate_at(c("prob_m", "prob_e", "prob_v"), cleanProb) %>%
+  separate(resultado, c("gol_mandante", "gol_visitante"), sep = "x") %>%
+  mutate_at(c("gol_mandante", "gol_visitante"), as.integer)
+
+
+# mutate_at: 
+# aplica o segundo argumento (um função) no primeiro 
+# (ou em todos elemntos do primeiro, quando se trata de vetor, por exemplo) 
+
+
+# solução do curioso para a parte de ano de interesse (incompreto): 
+  # str_extract(url, "[0-9]{2}") 
+  # pega os dois dígitos de 0 a 9 que aparecem na url 
+  # só funciona pra url com dois dígitos 
+
+```

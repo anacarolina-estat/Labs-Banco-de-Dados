@@ -1,0 +1,106 @@
+---
+title: "Manipulação de Banco de dados - Laboratório 03"
+author: "Ana Carolina"
+date: "28 de agosto de 2019"
+output: html_document
+---
+
+# Importação de Dados Retangulares - Excel.
+  O conjunto de dados em questão é o conjunto de índices de desenvolvimento mundial, disponibilizado     pelo Banco Mundial através do link http://datatopics.worldbank.org/world-development-indicators/
+  (http://datatopics.worldbank.org/world-development-indicators/).
+
+# Objetivos
+Ao fim deste laboratório, você deverá ser capaz de:
+    - Importar dados de planilhas específicas de arquivos em formato Excel;
+    - Trabalhar com variáveis cujos nomes fogem do padrão usual de programação (por exemplo, variáveis
+      com espaços brancos em seus nomes);
+    - Selecionar variáveis do interesse;
+    - Verificar se os dados estão no formato tidy e transformá-los para tal formato;
+    - Optar apropriadamente entre filtering joins e mutating joins;
+    - Produzir visualizações de dados de séries temporais;
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+```
+
+## Q1: Carregue os pacotes readxl e tidyverse.
+```{r}
+library(tidyverse)
+library(readxl)
+```
+
+## Q2: Crie uma variável chamada fname que contenha o caminho para o arquivo WDIEXCEL.xlsx, disponível no seu diretório de dados. Confirme que o R identifica a existência do arquivo utilizando o comando file.exists
+```{r}
+fname = file.path("C:/Users/ra212644/Downloads")
+file.exists(fname)
+```
+
+## Q3: Leia a planilha “Country” e armazene no objeto countries.
+```{r}
+countries = read_excel("WDIEXCEL.xlsx", sheet="Country")
+```
+
+## Q4: Mantenha apenas os registros de 5 países (Brasil e outros 4 de sua escolha)
+```{r}
+countries = countries %>% 
+  filter(`Country Code`  %in% c("USA", "ARG", "AUS", "JPN", "BRA"))
+```
+
+## Q5: Leia a planilha “Data” e armazene no objeto WDI.
+```{r}
+WDI = read_excel("WDIEXCEL.xlsx", sheet="Data")
+WDI %>% head
+```
+
+## Q6: Selecione apenas as colunas:
+      - Country Code
+      - Indicator Code
+      - E todos os anos de 1960-2018
+```{r}
+WDI = WDI %>% select(`Country Code`, `Indicator Code`, `1960`:`2018`)
+```
+
+## Q7: Confirme se os dados wm WDI estão em formato tidy. Se não estiverem, transforme-os para tal formato. Faça de forma que exista uma coluna referente ao ano chamada YEAR.
+```{r}
+# colunas sendo variáveis 
+
+WDI = WDI %>% 
+  gather("YEAR", "VALUE",`1960`:`2018`) %>% 
+  spread(`Indicator Code`, VALUE) 
+WDI$YEAR = as.integer(WDI$YEAR) 
+```
+
+## Q8: Confirme se a coluna referente ao ano está em formato inteiro.
+```{r}
+WDI$YEAR = as.integer(WDI$YEAR) 
+```
+
+## Q9: Para o objeto WDI, mantenha apenas os registros dos países listados em countries. Selecione as colunas:
+    - Country Code
+    - Short Name
+    - YEAR
+    - SP.DYN.CBRT.IN
+```{r}
+WDI = WDI %>% 
+  semi_join(countries, by = "Country Code") %>% 
+  select(c(`Country Code`, `Short Name`, `YEAR`, `SP.DYN.CBRT.IN`))
+  
+```
+
+## Q10: Ordene o objeto de forma que, para cada país, as informações estejam ordenadas por ano.
+```{r}
+# WDI = WDI %>% group_by(`Country Code`) %>% arrange(YEAR)
+WDI = WDI %>%
+    arrange(`Country Code`, YEAR)
+```
+
+## Q11: Q11. Construa um gráfico de linhas, usando o pacote ggplot2 , que tenha no eixo X a variável YEAR, no eixo Y a variável SP.DYN.CBRT.IN e que cada linha corresponda a um país diferente.
+```{r}
+ggplot(WDI, AES(YEAR, SP.DYN.CBRT.IN, colour = `Country Code`)) +
+  geom_line() 
+```
+

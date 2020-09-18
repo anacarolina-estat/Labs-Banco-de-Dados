@@ -1,0 +1,185 @@
+---
+title: "Manipulação de Banco de dados - Laboratório 03"
+author: "Ana Carolina"
+date: "23 de agosto de 2019"
+output: html_document
+---
+
+# Dados relacionais e operações do tipo join.
+  Conjuntos de dados estruturados costumam ser divididos em múltiplas tabelas. A razão para isso é a
+  minimização de duplicação de informação. Por este motivo, uma tarefa habitualmente realizada em
+  manipulação de bases de dados é a combinação de dados de diferentes origens.
+
+# Objetivos 
+Ao fim deste laboratório, você deve ser capaz de combinar duas tabelas de dados, de forma que, na tabela resultante, sejam mantidos registros que existam:
+    - em ambas as tabelas;
+    - apenas na primeira tabela;
+    - apenas na segunda tabela;
+    - em alguma das duas tabelas.
+Adicionalmente, você deve ser capaz de identificar registros que existam:
+    - apenas na primeira tabela;
+    - apenas na segunda tabela;
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Pacotes Utilizados 
+```{r}
+# Instalando pacotes necessários
+#install.packages("tidyverse")
+
+library("tidyverse")
+library("readr")
+library("dplyr")
+library("maps")
+library("RColorBrewer")
+```
+
+## Q1:
+
+1. Importe, utilizando o pacote readr , cada um dos três arquivos disponíveis. Os objetos resultantes
+devem ser chamados flights , airlines e airports .
+  Para o arquivo de vôos:
+      a. Importe apenas as colunas DESTINATION_AIRPORT e ARRIVAL_DELAY ;
+      b. Leia apenas 1 milhão de linhas por vez;
+      c. Remova vôos em que o aeroporto de destino comece com a letra 1;
+      d. Remova registros em que existam pelo menos uma coluna faltante;
+      e. Determine, para cada parte do arquivo, as estatísticas suficientes para a determinação do
+         atraso médio por aeroporto de destino;
+      f. Ao finalizar a leitura do arquivo, combine as estatísticas suficientes de modo a produzir a
+         média de atraso por aeroporto.
+Para o arquivo de aeroportos, importe apenas as colunas IATA_CODE , CITY e STATE
+```{r}
+airlines = read_csv("airlines.csv")
+
+airports = read_csv("airports.csv", 
+                    col_types = cols_only(IATA_CODE = "c", CITY = "c", STATE = "c"))
+
+
+getStats = function(input, pos){
+  input %>% 
+    filter(!startsWith(DESTINATION_AIRPORT, "1")) %>%
+    drop_na() %>% 
+    group_by(DESTINATION_AIRPORT) %>% 
+    summarise(atrasoMedio = mean(ARRIVAL_DELAY))
+  }
+
+
+flights = read_csv_chunked("flights.csv", 
+                           col_types = cols_only(DESTINATION_AIRPORT = "c", ARRIVAL_DELAY = "i"),
+                           chunk_size = 10000, 
+                           callback = DataFrameCallback$new(getStats))
+```
+
+## Q2: Selecione a operação apropriada join para incluir, na tabela flights, as colunas CITY e STATE. Para executar esta tarefa:
+ - Identifique a coluna que é a chave na tabela flights;
+ - Identifique a coluna que é a chave na tabela airports;
+ - Apresente o comando que combine ambas as tabelas, indicando explicitamente as chaves;
+ - Armazene a tabela resultante no objeto flights.
+```{r}
+# identificando as chaves 
+glimpse(airports) #IATA_CODE
+glimpse(flights) #DESTINATION_AIRPORT
+
+flights = flights %>% inner_join(airports, by = c("DESTINATION_AIRPORT" = "IATA_CODE"))
+ 
+```
+
+## Q3: Quantos aeroportos cada estado possui? Apresente uma tabela ordenada de forma decrescente (no
+número de aeroportos)
+```{r}
+airports %>% 
+  group_by(STATE) %>%
+  tally() %>%
+  arrange(desc(n))
+```
+
+
+# Q4: Para cada estado de chegada:
+    a. Determine a média do atraso médio na chegada e chame esta variável de STATE_DELAY ;
+    b. Agrupe a variável STATE_DELAY em quartis (utilizando as funções cut e quantile ), lembrandose         de incluir a classificação para o menor dos valores (explore o comando cut para descobrir o
+       argumento responsável por isso). Armazene os resultados na variável COLOR_CODE .
+    c. O objeto que conterá todos estes resultados deve ser chamado toMap
+```{r}
+toMap = flights %>% 
+  group_by(STATE) %>%
+  summarise(STATE_DELAY = mean(atrasoMedio)) %>% 
+  mutate(COLOR_CODE = cut(STATE_DELAY, quantile(STATE_DELAY), include.lowest = TRUE, labels = FALSE))
+  
+```
+
+# Q5: O pacote maps fornece geometrias para fronteiras entre estados. Apresente o mapa estadual utilizando o comando map.
+```{r}
+map("state")
+```
+
+# Q6: Crie um objeto chamado info , da classe tibble , contendo duas colunas:
+      a. STATE : cujo valor será o conteúdo do vetor state.abb ;
+      b. STATE_NAME : cujo valor será o conteúdo do vetor state.name .
+```{r}
+info = tibble(STATE = state.abb, STATE_NAME = state.name)
+```
+
+# Q7: Utilize comandos join para responder:
+      a. Que “estados” aparecem listados em toMap e estão ausentes em info ? Armazene estes
+         registros num objeto chamado faltantes .
+      b. Crie um objeto chamado info_completa que possua todas as informações ( STATE ,
+         STATE_DELAY , COLOR_CODE , STATE_NAME ) apenas para estados listados em ambas as tabelas,
+         toMap e info .
+      c. Crie um objeto chamado banco_completo que possua todos os registros, independente de
+         termos o nome de estado ou não.
+```{r}
+# Estados só em toMap
+faltantes = toMap %>% anti_join(info, by = "STATE")
+
+info_completa = inner_join(toMap, info, by = "STATE")
+
+banco_completo = full_join(toMap, info, by = "STATE")
+
+```
+
+# Q8. Produza um mapa que apresente o atraso médio na chegada por estado.
+      a. Confirme que a tabela info_completa esteja na mesma ordem que info (caso não esteja na
+         mesma ordem, ordene info_completa de forma que tenha a mesma ordem que info).
+      b. Utilizando o pacote RColorBrewer , com o comando brewer.pal , extraia 4 cores (associadas
+         com a coluna COLOR_CODE de info_completa ) da paleta de cores YlOrRd
+         (brewer.pal(4, 'YlOrRd')). Crie um tibble , chamado cores , com duas colunas: COLOR_CODE
+         e COLOR .
+      c. Combine info_completa com cores utilizando o join apropriado. Armazene o resultado,
+         novamente, em info_completa .
+      d. Refaça o mapa do item 5., adicionando os argumentos fill=TRUE e col=info_completa$COLOR.
+```{r}
+idx <- match(info$STATE, info_completa$STATE)
+info_completa = info_completa[idx,]
+  #info_completa %>% arrange(STATE_NAME)
+
+cores <- tibble(COLOR_CODE=1:4,
+               COLOR=brewer.pal(4, 'YlOrRd'))
+
+info_completa <- info_completa %>% left_join(cores, by="COLOR_CODE")
+
+map("state", fill = TRUE, col = info_completa$COLOR)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

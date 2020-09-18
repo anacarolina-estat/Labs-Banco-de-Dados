@@ -1,0 +1,215 @@
+---
+title: "Manipulaçãp de Banco de Dados - Laboratório 09"
+author: "Ana Carolina"
+date: "23 de outubro de 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Mongo DB
+O MongoDB é um banco de dados NoSQL focado em alta performance e amplamente utilizado em
+aplicações web e cenários envolvendo big data. O software é livre e gratuito, podendo ser obtido diretamente em https://www.mongodb.com/ (https://www.mongodb.com/).
+
+# Objetivos
+Ao fim deste laboratório, você deverá ser capaz de:
+    - Conectar-se a um banco de dados do tipo MongoDB utilizando o R como interface;
+    - Realizar pesquisas simples;
+    - Realizar consultas em campos aninhados;
+    - Inserir dados em coleções;
+    - Importar dados;
+    - Exportar dados;
+    - Determinar estatísticas de interesse por meio de operações agregadas.
+
+```{r}
+options(install.packages.check.source = "no")
+install.packages('mongolite', type='win.binary', dependencies = TRUE)
+library(mongolite)
+
+# servidor é configurado
+# cliente é o R
+```
+
+```{r}
+install.packages("jsonlite", type = "win.binary")
+install.packages("tidyverse")
+library(jsonlite)
+library(tidyverse)
+```
+
+
+## Q01: Conecte-se à plataforma MongoDB Atlas (https://www.mongodb.com/) usando as credenciais escolhidas por você na criação da conta (este login/senha costuma ser diferente do usuário/senha do banco de dados).
+
+## Q02: No menu à esquerda, escolha a opção Network Access, sob Security, clique em + ADD IP ADDRESS e escolha ADD CURRENT IP ADDRESS (isso permitirá acesso a partir do endereço IP que seu computador está utilizando neste momento). Você, alternativamente, poderá escolher ALLOW ACCESS FROM ANYWHERE, o que é muito menos seguro. Finalize clicando em CONFIRM.
+
+
+## Q03: Ainda no menu à esquerda, escolha a opção Clusters (em ATLAS). Clique em Connect e escolha Connect Your Application. Copie a expressão em Connection String Only. Observe que a expressão inicia-se com mongodb+srv://, que indica o protocolo de conexão. Em seguida, há o nome do usuário (no exemplo abaixo, benilton), seguido do símbolo : e da senha (em texto puro, aqui representada como <password>). Após a senha, o símbolo @ indica que a informação seguinte indicará o nome do servidor a ser utilizado (cluster0-s8gg0.mongodb.net). Após o nome do servidor a informação remanescente deverá ser removida (pois trata-se de um código de exemplo).
+
+03: Conecte-se à URL identificada por você na questão anterior. Crie um banco de dados chamado me315mongodb e, dentro deste, uma coleção chamada diamantes.
+```{r}
+# mongodb+srv: versão do software utilisado
+# db212644: nome de usuário
+# db212644: senha
+# @ : diz que depois dele vem o servidor
+# cluster0-urvnn.mongodb.net: servidor que subimos na nuvem 
+
+myurl = "mongodb+srv://anacarolina:ana12345678@cluster0-urvnn.mongodb.net"
+
+#mongodb+srv://anacarolina:<password>@cluster0-2bg7c.mongodb.net/test?retryWrites=true&w=majority
+
+# tabelas == coleções
+# obs == documentos 
+# db = me315mongodb nome do arquivo
+# em sql a estrutura é a mesma em todos registros, tem as mesmas colunas, em mongo cada doc tem sua propria coleção de colunas 
+
+
+con = mongo(collection = diamentes, db = me315mongodb, url = myurl)
+```
+
+## Q04: Exiba o conteúdo de con. Explore o método insert() e descreva textualmente que tipo de objeto o argumento data pode receber.
+```{r}
+library(ggplot2)
+library(magrittr)
+
+print(con)
+
+?mongo
+
+# O método insert adiciona linhas em uma coleção, as linhas são passadas por meio do argumento *data*. O argumento pode ser uma lista, para um registro único, um vetor de caracteres com registros json (um registro por string) ou então um data frame.
+```
+
+## Q05: Explore o conjunto de dados diamonds que é distribuído por meio do pacote ggplot2. Quantas observações e quantas colunas possui este conjunto de dados? Configure a semente aleatória do R para ser o valor numérico do seu RA, sorteie aleatoriamente 500 observações e as armazene no objeto mydiamonds.
+```{r}
+# cara do conjunto de dados
+diamonds %>% head(5)
+
+# dimensões (linhas e colunas)
+diamonds %>% dim()
+```
+
+## Q06: Grave a tabela acima na coleção MongoDB criada anteriormente.
+```{r}
+con$insert(diamonds)
+```
+
+
+## Q07: Recupere do banco de dados as informações de todos os diamantes cuja variável cut seja igual a Premium e custem menos de USD 1.000,00. Armazene o resultado na variável p1000a. Quantos diamantes ‘premium’ custam menos de 1.000 dólares na sua amostra?
+```{r}
+p1000a = con$find('{"cut":"Premium","price":{ "$lt" : 1000}}')
+
+# lt: lass than (menor)
+# gt: greater than (maior)
+# le: menor ou igual (less or equal)
+
+```
+
+
+## Q08: Para a consulta acima, refaça a chamada via MongoDB, de forma a obter apenas as colunas cut, clarity e price. Armazene o resultado na variável p1000b.
+```{r}
+p1000b = con$find('{"cut":"Premium", "price":{ "$lt" : 1000}}',
+                   fields = '{"_id":0, "cut":1, "clarity":1, "price":1}')
+
+# coloco id como zero, pois só quero as outras três var.
+# o servidor cria e força o retorno dessa coluna, então se não quero eu exluo isso
+
+```
+
+
+## Q09: Refaça a consulta anterior e retorne apenas os 5 diamantes mais caros presentes nesta amostra. O resultado deve ser armazenado na variável p1000c.
+```{r}
+p1000c <- con$find(query = '{"cut":"Premium", "price":{ "$lt":1000 }}',
+                  fields = '{"_id":0, "cut":1, "clarity":1, "price":1}',
+                  sort = '{"price":-1}',
+                  limit = 5)
+
+# -1 desc
+# 1 cresc
+```
+
+
+## Q10: Consulte o banco de dados (500 observações) para identificar quais são os 400 diamantes mais caros presentes na sua amostra. Qual foi o tempo total de execução desta consulta?
+```{r}
+inicio = Sys.time()
+
+  con$find(sort = '{"price":-1}', 
+           limit = 400)
+
+fim = Sys.time()
+
+dur = fim - inicio
+print(dur)
+
+
+#Sys.time(caro <- con$find(sort = '{"price":-1}', limit = 400))
+# tem que ser flecha: quero que executa e vai no r e cria o objeto caro 
+```
+
+
+## Q11: Crie um índice para a variável price.
+```{r}
+con$index('{"price":-1}')
+# -1 decrescente
+# 1 crescente
+
+# O que esse índice faz?
+# Parece que já deixa um registro da sequência ordenada de forma decrescente pela variável price, daí não precisa fazer as comparações, apenas buscar a posição no índice.
+```
+
+## Q12: Consulte novamente qual é o diamante mais caro e meça o tempo de execução, agora que um índice foi criado.
+```{r}
+inicio2 = Sys.time()
+
+  con$find(sort = '{"price":-1}', 
+           limit = 400) # o mais caro ou os 400 mais caros??
+
+fim2 = Sys.time()
+
+dur2 <- fim2 - inicio2
+print(dur2) 
+```
+
+
+## Q13: Utilize o método iterate() para trabalhar com lotes de linhas do banco de dados. Armazene o ## resultado de iterate() na variável it. Observe que o método iterate possui um argumento limit, que determina o número máximo de documentos da coleção a serem considerados. Explore a documentação do método e realize a iteração apenas para diamantes de cut="Premium", ordenando por preço (de maneira decresente). Aplique o método batch(n), com n=53, para determinar as estatísticas suficientes da média de preços. Saiba que, muito provavelmente, ao chegar ao fim do banco de dados, o número de observações no seu subconjunto será inferior ao tamanho do lote.
+```{r}
+it = con$iterate(query = '{"cut":"Premium"}',
+                  sort = '{"price":-1}')
+
+print(it)
+
+#ceiling arredonda para cima (proximo inteiro)
+# fazer iteração usando a condi de cut = premium e ordem desc e passe por todas obs do conunto de ados 
+# limit = t passa por todas obs 
+```
+
+
+## Q15: Utilizando o método export(), exporte o banco de dados para um arquivo no seu computador (chamado meusdiamantes.json). O arquivo deve ser gravado no formato JSON. Explore o arquivo e confirme a validade do seu formato.
+```{r}
+con$export(file("meuarquivo.json"))
+```
+
+
+## Q16: Exporte o banco de dados para um arquivo no seu computador. O arquivo deve ser gravado no formato BSON e chamado meusdiamantes.bson. Explore o arquivo e confirme a validade do seu formato. Compare os tamanhos de ambos os arquivos.
+```{r}
+con$export(file("meuarquivo.bson"), bson=TRUE)
+```
+
+
+## Q17: Remova do banco de dados a coleção com que você está trabalhando. Conte o número de observações existentes no banco de dados após a remoção.
+```{r}
+con$count()
+con$drop()
+con$count()
+```
+
+
+## Q18: Utilizando o método import(), importe o arquivo BSON criado por você diretamente para o banco de dados. Conte o número de observações existentes após a importação.
+
+```{r}
+con$count()
+# con$inport(file("meuarquivo.json"))
+con$import(file("meuarquivo.bson"), bson=TRUE)
+con$count()
+```
+

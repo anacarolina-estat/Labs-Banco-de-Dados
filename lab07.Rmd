@@ -1,0 +1,149 @@
+---
+title: "Manipulação de Banco de Dados - Laboratório 07"
+author: "Ana Carolina"
+date: "7 de outubro de 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# SQLite Parte II
+
+# Objetivo 
+Ao fim deste laboratório, você deverá ser capaz de:
+
+  - Conectar-se a um banco de dados do tipo SQLite utilizando o R como interface;
+  - Explorar quais são as tabelas disponíveis no referido banco de dados;
+  - Identificar quais são as colunas de uma dada tabela existente no banco de dados;
+  - Realizar pesquisas simples;
+  - Extrair registros do banco de dados e armazená-las em objetos do R;
+  - Realizar algumas pesquisas complexas, utilizando WHERE, INNER JOIN.
+  - Criar novas tabelas no banco de dados.
+
+
+# Instalando e carregando pacotes 
+```{r}
+install.packages("RSQLite", type="win.binary")
+library(RSQLite)
+library(tidyverse)
+```
+
+# Definiondo diretório do arquivo 
+```{r}
+path = "C:/Users/212644"
+file.exists(path)
+db = file.path(path, "uwmadison.sqlite3")
+```
+
+# Q1:  
+```{r}
+# conectando o BD
+
+conn = dbConnect(SQLite(), "uwmadison.sqlite3")
+```
+
+# Q2:
+```{r}
+# listando as tabelas existentes no banco de dados.
+dbListTables(conn)
+```
+
+```{r}
+# quantos profs são: 
+
+dbGetQuery(conn, "SELECT COUNT(DISTINCT(id)) AS n FROM instructors
+           INNER JOIN teachings ON teachings.instructor_id = instructors.id 
+           INNER JOIN sections ON sections.uuid = teachings.section_uuid
+           INNER JOIN subject_memberships 
+           ON subject_memberships.course_offering_uuid = sections.course_offering_uuid
+           INNER JOIN subjects ON subjects.code = subject_memberships.subject_code
+           WHERE subjects.abbreviation = 'STAT'")
+```
+
+```{r}
+# quem são os profs 
+
+dbGetQuery(conn, "SELECT DISTINCT(instructors.name) FROM instructors
+           INNER JOIN teachings ON teachings.instructor_id = instructors.id 
+           INNER JOIN sections ON sections.uuid = teachings.section_uuid
+           INNER JOIN subject_memberships 
+           ON subject_memberships.course_offering_uuid = sections.course_offering_uuid
+           INNER JOIN subjects ON subjects.code = subject_memberships.subject_code
+           WHERE subjects.abbreviation = 'STAT'")
+```
+
+# Q3:
+```{r}
+# prof mais difícil é o que tem as menores notas no oferecimento de uma disciplina 
+# media de um ofereciemnto 
+
+dbGetQuery(conn, "SELECT instructors.name FROM instructors
+           INNER JOIN teachings ON teachings.instructor_id = instructors.id
+           INNER JOIN sections ON sections.uuid = teachings.section_uuid
+           INNER JOIN course_offerings 
+           ON sections.course_offerings_uuid = course_offerings.uuid
+           INNER JOIN grade_distribution 
+           ON grade_distributions.course_offerings_uuid = ")
+
+```
+
+```{r}
+# prof mais dificil 
+dbGetQuery(conn, "SELECT instructors.id, instructors.name, ((a_count*4)+(ab_count*3.5)+(b_count*3)+
+           (bc_count*2.5)+(c_count*2)+(d_count*1)+(f_count*0))/
+           (a_count+ab_count+b_count+bc_count+c_count+d_count+f_count) 
+           AS media 
+           FROM grade_distributions 
+           INNER JOIN course_offerings 
+           ON course_offerings.uuid = grade_distributions.course_offering_uuid 
+           INNER JOIN subject_memberships 
+           ON subject_memberships.course_offering_uuid = course_offerings.uuid 
+           INNER JOIN subjects 
+           ON subject_memberships.subject_code = subjects.code
+           INNER JOIN sections 
+           ON course_offerings.uuid = sections.course_offering_uuid 
+           INNER JOIN teachings 
+           ON teachings.section_uuid = sections.uuid
+           INNER JOIN instructors 
+           ON teachings.instructor_id = instructors.id
+           WHERE abbreviation = 'STAT'
+           LIMIT 6")
+
+
+dbExecute(conn, "CREATE VIEW profstat AS SELECT instructors.id, instructors.name, ((a_count*4)+(ab_count*3.5)+(b_count*3)+
+           (bc_count*2.5)+(c_count*2)+(d_count*1)+(f_count*0))/
+           (a_count+ab_count+b_count+bc_count+c_count+d_count+f_count) 
+           AS media 
+           FROM grade_distributions 
+           INNER JOIN course_offerings 
+           ON course_offerings.uuid = grade_distributions.course_offering_uuid 
+           INNER JOIN subject_memberships 
+           ON subject_memberships.course_offering_uuid = course_offerings.uuid 
+           INNER JOIN subjects 
+           ON subject_memberships.subject_code = subjects.code
+           INNER JOIN sections 
+           ON course_offerings.uuid = sections.course_offering_uuid 
+           INNER JOIN teachings 
+           ON teachings.section_uuid = sections.uuid
+           INNER JOIN instructors 
+           ON teachings.instructor_id = instructors.id
+           WHERE abbreviation = 'STAT'
+           LIMIT 6")
+
+dbGetQuery(conn, "SELECT id, name, AVG(media) AS mediageral 
+           FROM profstat 
+           WHERE media >= 0 
+           GROUP BY id ORDER BY mediageral
+           LIMIT 5")
+
+```
+
+### Questão 4: desconectando o BD
+```{r}
+dbDisconnect(conn)
+```
+
+
+

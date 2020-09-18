@@ -1,0 +1,63 @@
+---
+title: "Manipulação de banco de dados - Laboratório Especial"
+author: "Ana Carolina"
+date: "16-20 de setembro"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# carregando pacotes nessessários para o desenvolvimento do laboratório
+
+library(readr)
+library(tidyr)
+library(dplyr)
+#library(tidyverse)
+library(leaftlet)
+library(ggplot2)
+library(ggcal)
+```
+
+```{r}
+# definindo diretório no qual iremos trabalhar
+
+path = "/home/ana/Downloads"
+file.exists(path)
+```
+
+```{r}
+# importando conjunto de dados 
+ 
+flights = read_csv(file.path(path, "flights.csv"))
+airports = read_csv(file.path(path, "airports.csv"))
+airlines = read_csv(file.path(path, "airlines.csv"))
+```
+
+```{r}
+analisa_aeronave = function(tail_number, arquivo){
+  getStats = function(input, pos){
+  input %>% 
+      filter(TAIL_NUMBER == tail_number) %>% 
+      mutate(Data = as.Date(paste(YEAR,MONTH,DAY, sep = "-"))) %>% 
+      arrange(Data)
+    }
+  
+read_csv_chunked(arquivo, 
+                   chunk_size = 10000, 
+                   callback = DataFrameCallback$new(getStats)) %>% 
+    inner_join(airports, by = c("DESTINATION_AIRPORT" = "IATA_CODE")) %>%
+    leaflet() %>% 
+    addTiles() %>% 
+    addCircleMarkers(~LONGITUDE, ~LATITUDE, 
+                     clusterOptions = markerClusterOptions(), 
+                     label = ~DESTINATION_AIRPORT)
+  popup = ~paste("No dia", as.character(round(atraso,2)), "minutos.")
+
+}
+
+analisa_aeronave("N431WN", file.path(path, "flights.csv"))
+```
+

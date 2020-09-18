@@ -1,0 +1,101 @@
+---
+title: "Manipulação de Banco de Dados - Laboratório 08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+ 
+# SQLite - Processamento de Dados em Lote. 
+  SQLite é uma aplicação de banco de dados de pouquíssimo impacto e com um potencial de aplicação
+  bastante amplo. Habitualmente, em ambientes de produção que exijam alta performance ou operações      mais complexas, SQLite não é a ferramenta padrão de escolha. Para aplicações de menor porte, o        SQLite é uma ferramenta de grande importância, pois adequa-se aos padrões de SQL e é
+  multiplataforma. 
+
+# Objetivo:
+Ao fim deste laboratório, você deverá ser capaz de:
+  - Usar a estratégia de leitura por chunks implementada no pacote readr para leitura dos dados de
+    vôos;
+  - Utilizar a função SideEffectChunkCallback$new() para depositar os dados do arquivo diretamente no
+    banco de dados (sem devolver resultados para o usuário);
+
+# Recomendações:
+  - Não utilize o servidor jupyter.ime.unicamp.br para executar esta atividade;
+  - Instale os pacotes readr e RSQLite , se necessário. A sugestão é empregar
+    install.packages(c("readr", "RSQLite"), dep=TRUE, type='win.binary') .
+  - Atente para mensagens de erro adicionais (como outros pacotes faltantes) e instale-os conforme
+    requerido.
+
+```{r}
+install.packages(c("readr", "RSQLite"), dep=TRUE, type='win.binary')
+library(RSQLite)
+library(readr)
+library(tidyverse)
+```
+
+## Q1: Crie um arquivo de banco de dados em SQLite chamado voos.sqlite3. (Dica: o comando dbConnect() se conecta num banco de dados se o arquivo apontado existir ou cria um novo, caso o arquivo não exista.)
+```{r}
+wd = "C:/Users/212644/Downloads"
+fname = file.path(wd, "voos.sqlite3")
+conn = dbConnect(SQLite(), fname)
+```
+
+
+## Q2: Leia os arquivos airlines.csv e airports.csv. Deposite o conteúdo de cada um destes arquivos nas tabelas, respectivamente, airlines e airports. Utilize o comando dbWriteTable() para isso.
+```{r}
+airlines = read_csv(file.path(wd, "airlines.csv"))
+airports = read_csv(file.path(wd, "airports.csv"))
+
+# cria uma tabela dentro do bd em sql 
+dbWriteTable(conn, "airlines", airlines)  # passa o nome da tabela e o valor 
+dbWriteTable(conn, "airports", airports)
+
+dbListTables(conn)
+
+```
+
+
+## Q3: Crie uma função chamada lerDados contendo 2 argumentos, input e pos. A função deve apresentar ao usuário uma mensagem de progresso da leitura do arquivo flights.csv (utilize o comando message()), aos moldes do apresentado abaixo. A função deve salvar apenas os vôos que partiram ou chegaram aos seguintes aeroportos BWI, MIA, SEA, SFO e JFK, numa tabela chamada flights. Observe que a função não deve retornar nada para o usuário, deve apenas gravar a tabela obtida do chunk no banco de dados. (Dica: utilize o comando dbWriteTable() e estude como o argumento append deve ser utilizado para permitir que os chunks intermediários sejam adicionados ao fim da tabela.)
+```{r}
+# definindo a função:
+lerDados = function(input, pos){
+  tmp = input %>% 
+    filter(ORIGIN_AIRPORT %in% c("BWI", "MIA", "SEA", "SFO", "JFK") | 
+           DESTINATION_AIRPORT %in% c("BWI", "MIA", "SEA", "SFO", "JFK"))
+  dbWriteTable(conn, name = "flights", value = tmp, append = T)
+  message("Leitura atingiu a linha ", pos)
+}
+
+# teste:
+tb = read_csv(file.path(wd,"flights_small.csv.zip"))
+lerDados(input = tb, pos = 100)
+dbRemoveTable(conn, name = "flights")
+dbListTables(conn)
+
+```
+
+## Q4: Leia o arquivo flights.csv, restringindo-se às colunas YEAR, MONTH, DAY, AIRLINE, FLIGHT_NUMBER, ORIGIN_AIRPORT, DESTINATION_AIRPORT e ARRIVAL_DELAY, e aplique a função lerDados() criada acima. Observe, novamente, que a função lerDados() não retorna nada para o usuário. Por isso, a função de callback a ser utilizada é SideEffectChunkCallback$new(). Leia 100 mil registros por vez.
+```{r}
+read_csv2_chunked(file = file.path(wd, "flights.csv.zip"), 
+                  callback = SideEffectChunkCallback$new(lerDados),
+                  chunk_size = 1e5,
+                  col_types = cols_only(YEAR = 'i', MONTH = 'i', DAY = 'i', AIRLINE = 'c', FLIGHT_NUMER = 'i', 
+                                        DESTINATION_AIRPORT = 'c', ORIGIN_AIRPORT = 'c', ARRIVAL_DELAY = 'i')
+                  )
+```
+
+
+## Q5: Acesse o banco de dados e, por meio de uma chamada em SQL, apresente o tempo médio de atraso de chegada por aeroporto de destino, a sigla do aeroporto, o nome completo do aeroporto e o nome completo da companhia aérea. Ordene o resultado (na mesma chamada de SQL) por ordem decrescente deste atraso médio (i.e., o primeiro registro deve ser o aeroporto que tem o maior tempo de atraso na chegada). Atente para o fato de que o mesmo nome de coluna pode acontecer em diferentes tabelas
+```{r}
+sql = "SELECT DESTINATION_AIRPORT, a.AIRPORT, b.AIRLINE, AVG(c.ARRIVAL_DELAY) AS atraso FROM flights INNER JOIN airports AS a ON c.DESTINATION_AIRPORT = a.IATA_CODE INNER JOIN airlines as b ON fligths.airline = b.IATA_CODE GROUP BY DESTINATION_AIRPORT, b.AIRLINE ORDER BY atraso DESC"
+
+out = dbGetQuery(conn, sql)
+
+ggplot(out, aes(x = atraso)) + stat_ecdf()
+
+```
+
+
+
+
+

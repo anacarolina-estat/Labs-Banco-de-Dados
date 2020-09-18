@@ -1,0 +1,117 @@
+---
+title: "Manipulação de Banco de Dados - Laboratório 06"
+author: "Ana Carolina"
+date: "25 de setembro de 2019"
+output: html_document
+---
+
+# SQLite
+  O SQLite é uma biblioteca embutida em um processo único que é autônomo, não necessita de servidor e   exige zero de configuração. O código é de domínio público e seu uso é gratuito em qualquer tipo de    utilização. Trata-se de um sistema SQL completo, capaz de utilizar múltiplas tabelas, índices,        gatilhos e visões. Ele funciona, virtualmente, em qualquer plataforme (incluindo móveis) e pesa       cerca   de 600KB.
+  
+# Objetivos
+Ao fim deste laboratório, você deverá ser capaz de: - Conectar-se a um banco de dados do tipo SQLite utilizando o R como interface; - Explorar quais são as tabelas disponíveis no referido banco de dados;     - Identificar quais são as colunas de uma dada tabela existente no banco de dados; 
+    - Realizar pesquisas simples; - Extrair registros do banco de dados e armazená-las em objetos do        R; 
+    - Realizar pesquisas mais complexas, utilizando WHERE, GROUP BY, INNER JOIN, HAVING, LIMIT, DISTINCT e GLOB.
+    
+# Recomendações Gerais
+    - Toda manipulação de dados deve ocorrer com verbos do pacote dplyr.
+    - O livro R for Data Science possui um excelente capítulo sobre strings.
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("RSQLite")
+library(RSQLite)
+```
+
+## Q1: Baixe o arquivo disco.db e armazene na variável path o caminho completo (pasta) na qual o arquivo foi gravado. Utilize o comando file.path() para combinar a variável path com o nome do arquivo (disco.db) e obter o nome do arquivo com seu respectivo caminho. Armazene este resultado na variável fname.
+```{r}
+#fname = file.path("ME315", "disco", "disco.bd")
+#file.exists(fname)
+```
+
+## Q2: Utilizando o pacote RSQLite, conecte-se ao arquivo de banco de dados. Armazene a conexão na variável conn.
+```{r}
+db = dbConnect(SQLite(), fname)      # não pode usar readr 
+db                                   # vão errar na prova
+```
+
+## Q3: Liste as tabelas existentes no banco de dados.
+```{r}
+dbListTables(db) # lista todas as tabelas de db
+```
+
+## Q4: Identifique os nomes de todas as colunas existentes na tabela customers.
+```{r}
+#dbListFields("customers") # erro na prova
+dbListFields(db, "customers") # tem que falar o banco de dados que estamos trabalhando
+```
+
+## Q5: Utilizando apenas SQLite, com o apoio do comando dbGetQuery, identifique quantos clientes estão atualmente cadastrados neste banco de dados.
+```{r}
+# dbGetQuery(db, "SELECT CustomerId FROM customers") # extrai a tabela 
+dbGetQuery(db, "SELECT COUNT(CustomerId) FROM customers") # ao invés de extrair a tabela inteira, vai contar o núm de registros
+                                                          # a operação acontece no servidor 
+```
+
+## Q6: Utilizando apenas SQLite, identifique o número de países diferentes em que moram os clientes encontrados acima.
+```{r}
+dbGetQuery(db, "SELECT COUNT(DISTINCT(Country)) FROM customers") # mostra o núm de países distintos 
+```
+
+## Q7: Utilizando apenas SQLite, quantos clientes existem por país? A tabela resultante deve conter o nome do país e a respectiva contagem, além de ser ordenada de maneira decrescente pela referida contagem.
+```{r}
+dbGetQuery(db, "SELECT Country, COUNT(CustomerId) AS n FROM customers GROUP BY Country ORDER BY n DESC")  # conta os clientes agrupados por paises
+# AS renomeia a coluna anterior para  n 
+# ORDER BY DESC ordena em ordem decrscente 
+```
+
+
+## Q8: Quais são os 5 países com mais clientes registrados? Use apenas SQLite.
+```{r}
+dbGetQuery(db, "SELECT Country, COUNT(CustomerId) AS n FROM customers GROUP BY Country ORDER BY n DESC LIMIT 5")
+# 5 paises que tem mais clientes 
+# LIMIT pega as 5 primeiras letras 
+```
+
+## Q9: Quais são os países registrados que possuem apenas 6 letras no nome?
+```{r}
+dbGetQuery(conn, "SELECT DISTINCT Country FROM customers WHERE Country GLOB '??????'")
+```
+
+## Q10: Quais foram as músicas compradas por clientes brasileiros?
+```{r}
+dbListTables(db)
+dbListFields(db, "albums")
+dbListFields(db, "artists")
+
+# resposta usa join 
+
+dbGetQuery(db, "SELECT Title, Name FROM albums INNER JOIN artists ON albums.ArtistId = artists.ArtistId")
+
+# albums.ArtistId = artists.ArtistId chave: nome da tabela e nome da coluna que vai funcionar como chave
+
+dbGetQuery(conn, "
+           SELECT DISTINCT Name 
+            FROM tracks
+              INNER JOIN invoice_items
+                ON tracks.TrackId = invoice_items.TrackId
+              INNER JOIN invoices 
+                ON invoice_items.InvoiceId = invoices.InvoiceId
+              INNER JOIN customers ON invoices.CustomerId = customers.CustomerId
+            WHERE customers.Country = 'Brazil'
+            ORDER BY Name
+           ")
+```
+
+## Q10: Desconecte do banco de dados.
+```{r}
+dbDisconnect(db)
+```
+
+
+

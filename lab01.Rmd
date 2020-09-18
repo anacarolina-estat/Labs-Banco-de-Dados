@@ -1,0 +1,186 @@
+---
+title: "Manipulação de Banco de dados - Laboratório 01"
+author: "Ana Carolina"
+date: "13 de agosto de 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Manipulação de Dados no Formato Tidy
+
+Um conjunto de dados no formato tidy beneficia o analista de dados por permitir a manipulação dos mesmos de uma maneira unificada. De modo similar, métodos estatísticos são habitualmente implementados para receber dados neste formato. Desta maneira, a importação e tratamento de dados visando o referido formato reduzirá a criação de bancos de dados temporários, evitando problemas difíceis de diagnosticar.
+
+## Q1: Instale o pacote tidyverse
+```{r}
+install.packages( "tidyverse", repos="http://cran.us.r-project.org") #Instala o pacote tidyverse
+```
+
+## Q2: Carregue o pacote tidyverse
+```{r}
+library( "tidyverse") #Carrega o pacote tidyverse
+```
+
+## Q3: Apresente os bancos de dados table1, table2, table3, table4a e table4b
+```{r}
+table1 #Exibe a tibble chamada table1
+table2 #Exibe a tibble chamada table2
+table3 #Exibe a tibble chamada table3
+table4a #Exibe a tibble chamada table4a
+table4b #Exibe a tibble chamada table4b
+```
+
+## Q4: Descreva textualmente se cada um dos conjuntos de dados apresentados acima está no formato tidy. Justifique cada uma de suas respostas.
+
+Resposta: Um conjunto de dados está no formato tidy quando cada linha corresponde à uma observação, cada coluna à uma variável e cada célula contém somente um valor. 
+
+## Q5: Utilizando comandos do pacote dplyr, determine a taxa de ocorrência de tuberculose para cada 10.000 pessoas.
+```{r }
+# Cria uma nova coluna em table1 com a taxa de casos para 10000 pessoas.
+table1 %>%
+  mutate( rate=10000*(cases/population))
+```
+
+## Q6: Apresente, utilizando comandos do pacote dplyr, o número de casos de tuberculose por ano.
+```{r }
+# Faz a soma do número de casos de tuberculose na tabela para cada ano.
+table1 %>%
+  group_by( year) %>%
+  summarise( total=sum(cases))
+```
+
+## Q7: Apresente um gráfico de linhas, preparado via ggplot2, apresentando a mudança no número de casos por país.
+```{r }
+# Gráfico de linhas com a mudança no número de casos por país
+table1 %>%
+  ggplot( aes( x=year, y=cases, color=country)) +
+    geom_line()
+```
+
+## Q8: Calcule a taxa para as tabelas table2 e table4a+table4b. Para isso, você precisará executar 4 passos:
+  - Extrair o número de casos de tuberculose por país, por ano;
+  - Extrair o tamanho da população correspondente, por ano;
+  - Dividir o número de casos pelo tamanho da população e multiplicar o resultado por 10.000;
+  - Armazenar o resultado numa variável apropriada;
+```{r}
+# Calcula a taxa para a tabela table2 e armazena o resultado na tabela table2rate
+table2rate <- table2 %>%
+  group_by(country, year) %>%
+  summarise( rate=10000*(count[1]/count[2]))
+
+# Calcula a taxa para as tabelas table4a+table4b e armazena em table4rate:
+table4rate1 <- (10000*(table4a[,2]/table4b[,2]))
+table4rate2 <- (10000*(table4a[,3]/table4b[,3]))
+
+# Armazenando o resultado 
+table4rate <- cbind(table4a[,1], table4rate1, table4rate2) %>%
+  gather(year, rate, "1999":"2000")
+
+```
+
+
+## Q9: Refaça o gráfico da questão 7 para os dados apresentados em table2
+```{r}
+# Gráfico de linhas com a mudança no número de casos por país
+table2 %>% 
+  filter(type == "cases") %>%
+  ggplot( aes( x=year, y=count, color=country)) +
+  geom_line()
+```
+
+## Q10: Utilizando o comando gather, transforme table4a em um objeto no formato tidy. Armazene o resultado num objeto chamado tidy4a.
+```{r}
+#Transforma a table4a em formato tidy
+tidy4a <- table4a %>%
+  gather(year, rate, "1999":"2000", convert=TRUE)
+```
+
+## Q11: Refaça o item 10 para o objeto table4b. Armazene o resultado num objeto chamado tidy4b.
+```{r}
+# Transforma a table4b em formato tidy
+tidy4b <- table4b %>%
+  gather(year, pop, "1999":"2000", convert=TRUE)
+```
+
+## Q12: Combine os objetos tidy4a e tidy4b em um único objeto, utilizando o comando left_join. Apresente uma explicação textual sobre o que faz o referido comando.
+```{r}
+# União dos objetos tidy4a e tidy4b. 
+# O comando abaixo recebe dois argumentos x e y correspondentes a dois objetos de um mesmo conjunto de dados e copia os valores das variáveis distintas de y para o primeiro (x). Esse alinhamento das observações é feito pelo argumento by, no caso o sistema entende x = tidy4a e y = tidy4b vai reconhecer e usar as variáveis country e year para tal união.
+left_join(tidy4a, tidy4b)
+```
+
+## Q13: Use o comando spread para tranformar o objeto table2 em um objeto com formato tidy.
+```{r}
+spread(table2, type, count)
+```
+
+## Q14: Observe que a coluna rate do objeto table3 é um texto mostrando a fração que formaria a taxa de casos de tuberculose. Transforme o objeto table3 em um objeto com formato tidy separando a coluna 3 em duas outras colunas: cases e population, utilizando o comando separate. Utilize o argumento convert para transformar o resultado em um objeto numérico.
+```{r}
+# Transforma a table3 em formato tidy
+table3 %>%
+  separate(rate, into = c("cases", "population"), sep = "/", convert=TRUE)
+```
+
+# Importação de Dados
+
+No link https://www.kaggle.com/usdot/flight-delays (https://www.kaggle.com/usdot/flight-delays), existem dados que descrevem o atraso de vôos nos Estados Unidos. Estas informações estão disponíveis em 3 arquivos, que serão obtidos a partir da descompactação do arquivo original:
+
+## Q15: Crie uma variável chamada path, que armazenará o caminho completo até os arquivos supracitados.
+```{r}
+# A variável path armazena o caminho completo até os arquivos de banco de dados
+
+path = 'C:/Users/ra212644/Downloads/flight-delays'
+```
+
+## Q16: Instale o pacote readr e importe cada um dos arquivos utilizando o comando read_csv de maneira apropriada. Adicione a chave cache=TRUE na definição do bloco de código (chunk), de forma a acelerar a importação dos dados em execuções futuras do Rmd.
+```{r, cache=TRUE}
+# Carrega o pacote readr
+library(readr)
+
+#Importa os bancos de dados de linhas aereas, aeroportos e voos.
+airlines <- file.path(path, "airlines.csv") %>% read_csv()
+airports <- file.path(path, "airports.csv") %>% read_csv()
+flights <- file.path(path, "flights.csv") %>% read_csv()
+```
+
+## Q17: Para cada mês, qual foi o vôo (no formato ORIGEM-DESTINO, ex., ANC-SEA) que apresentou o maior atraso médio na chegada (ARRIVAL_DELAY)? Para realização deste item, ignore todos os vôos que partiram de aeroportos cujos símbolos começam com o número 1. Armazene o resultado em um objeto chamado atrasos e denomine a coluna de atrasos médio de ATRASO
+```{r}
+# Encontra para cada mes qual voo, no formato ORIGEM-DESTINO, teve o maior atraso médio. Ignora voos partindo de aeroportos cujos simbolos comecam com o numero 1
+atrasos <- flights %>%
+  filter( !startsWith( ORIGIN_AIRPORT, "1")) %>%
+  mutate( ORIGIN_DESTINATION = str_c(ORIGIN_AIRPORT, 
+                                   DESTINATION_AIRPORT, 
+                                   sep="-")) %>% 
+  group_by( MONTH, ORIGIN_DESTINATION) %>% 
+  summarise( ATRASO=mean( ARRIVAL_DELAY, na.rm=TRUE)) %>% 
+  top_n( 1, ATRASO)
+```
+
+## Q18:  Para os vôos mais atrasados encontrados acima, modifique a tabela de forma a adicionar o nome completo de cada aeroporto (use o comando left_join) e também a cidade do aeroporto. Para isso, importe o arquivo airports.csv. A tabela resultante deverá ter as seguintes colunas: 
+  - MONTH
+  - ORIGEM
+  - DESTINO
+  - ATRASO
+  - AIRPORT_ORIGEM
+  - CITY_ORIGEM
+  - AIRPORT_DESTINO
+  - CITY_DESTINO
+```{r}
+# Modifica a tabela de atrasos para possuir nome completo e cidade dos aeroportos.
+atrasos <- atrasos %>% 
+  separate('ORIGIN_DESTINATION', c('ORIGEM', 'DESTINO')) %>% 
+  left_join( select( airports,"IATA_CODE", "AIRPORT_ORIGEM"="AIRPORT", "CITY_ORIGEM"="CITY"), by=c("ORIGEM"="IATA_CODE")) %>% 
+  left_join( select( airports,"IATA_CODE", "AIRPORT_DESTINO"="AIRPORT", "CITY_DESTINO"="CITY"), by=c("DESTINO"="IATA_CODE"))
+```
+
+## Q19: Apresente o resultado obtido na questão acima.
+```{r}
+atrasos
+```
+
+
+
+
+
